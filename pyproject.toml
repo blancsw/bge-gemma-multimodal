@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "BGE Gemma multimodal"
+version = "1.0.0"
+description = "Description to fill"
+authors = ["Infomaniak Ai Team"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+transformers = {extras = ["sentencepiece"], version = "^4.47.0"}
+torch = {version = "^2.5.1+cu124", source = "pytorch-cu124"}
+torchvision = {version = "^0.20.1+cu124", source = "pytorch-cu124"}
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^4.0.0"
+
+
+[[tool.poetry.source]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+priority = "supplemental"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
