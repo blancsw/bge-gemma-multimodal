@@ -1,5 +1,5 @@
 """BGE Multimodal configuration"""
-import warnings
+from typing import Union
 
 from transformers import PretrainedConfig, CONFIG_MAPPING
 from transformers.models.gemma2 import Gemma2Config
@@ -9,7 +9,6 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-# Adapt from: transformers.models.paligemma.configuration_paligemma.PaliGemmaConfig
 class BgeGemma2MultimodalConfig(PretrainedConfig):
 
     model_type = "bgemultimodal"
@@ -17,63 +16,107 @@ class BgeGemma2MultimodalConfig(PretrainedConfig):
 
     def __init__(
             self,
-            vision_config: SiglipVisionConfig = None,
-            text_config: Gemma2Config = None,
-            ignore_index=-100,
-            image_token_index=256000,
-            vocab_size=257152,
+            text_config: Union[Gemma2Config, dict] = None,
+            vision_config: Union[SiglipVisionConfig, dict] = None,
+            text_pretrained: str = "BAAI/bge-multilingual-gemma2",
+            vision_pretrained: str = "google/siglip-base-patch16-224",
             projection_dim=2048,
-            hidden_size=2048,
-            **kwargs,
+            image_token_index=256000,
+            **kwargs
             ):
-        self._ignore_index = ignore_index
+        """
+        Initializes a multimodal model configuration combining text and vision modules.
+
+        This constructor sets up the configuration for the text and vision modules, along with
+        the projection dimension for feature representations. It allows configuration
+        objects or pre-trained model names for both text and vision modules.
+
+        Args:
+            text_config (Union[Gemma2Config, dict]): The configuration for the text module.
+                Can be an instance of `Gemma2Config` or a dictionary.
+            vision_config (Union[SiglipVisionConfig, dict]): The configuration for the vision module.
+                Can be an instance of `SiglipVisionConfig` or a dictionary.
+            text_pretrained (str): The name of the pre-trained text model to use. Defaults
+                to "BAAI/bge-multilingual-gemma2".
+            vision_pretrained (str): The name of the pre-trained vision model to use. Defaults
+                to "google/siglip-base-patch16-224".
+            projection_dim (int): The dimensionality of the projection layer for aligning
+                text and vision features in the same space. Defaults to 2048.
+            **kwargs: Additional keyword arguments for further customization.
+
+        Raises:
+            AssertionError: If neither `text_config` nor `text_pretrained` is provided.
+            AssertionError: If neither `vision_config` nor `vision_pretrained` is provided.
+        """
+
+        super().__init__(**kwargs)
+        self.text_pretrained = text_pretrained
+        self.vision_pretrained = vision_pretrained
         self.image_token_index = image_token_index
-        self._vocab_size = vocab_size
-        self.projection_dim = projection_dim
-        self.hidden_size = hidden_size
-        self.vision_config = vision_config
-        self.is_encoder_decoder = False
+        # If config objects are passed directly, use them; otherwise, instantiate from dict
+        if isinstance(text_config, Gemma2Config):
+            self.text_config = text_config
+        elif isinstance(text_config, dict):
+            self.text_config = Gemma2Config(**(text_config or {}))
+        else:
+            assert text_config is not None, f"You must provide text_config or text_pretrained parameter"
+            self.text_config = Gemma2Config.from_pretrained(text_pretrained)
 
         if isinstance(self.vision_config, dict):
             vision_config["model_type"] = (
                 vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
             )
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
-                    intermediate_size=4096,
-                    hidden_size=1152,
-                    patch_size=14,
-                    image_size=224,
-                    num_hidden_layers=27,
-                    num_attention_heads=16,
-                    vocab_size=257152,
-                    vision_use_head=False,
-                    )
+        elif isinstance(vision_config, SiglipVisionConfig):
+            self.vision_config = vision_config
+        else:
+            assert vision_config is not None, f"You must provide text_config or vision_pretrained parameter"
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"].from_pretrained(vision_pretrained)
 
-        self.text_config = text_config
-        if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            self.text_config = Gemma2Config.from_pretrained("BAAI/bge-multilingual-gemma2")
-        self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
-        self.vision_config.projection_dim = projection_dim
-        super().__init__(**kwargs)
+        # Example of a parameter for projecting text/image features into a shared space
+        self.projection_dim = projection_dim
 
-    @property
-    def ignore_index(self):
-        warnings.warn(
-                "The `igno re_index` attribute is deprecated and will be removed in v4.47.",
-                FutureWarning,
+        # For clarity, you may set a default architecture name or adapt as you see fit
+        if not hasattr(self, "architectures"):
+            self.architectures = ["BgeGemma2MultimodalModel"]
+
+    @classmethod
+    def from_text_vision_configs(
+            cls,
+            text_config: Gemma2Config,
+            vision_config: SiglipVisionConfig,
+            **kwargs
+            ):
+        """
+        Instantiate a `BgeGemma2MultimodalConfig` from Gemma2 + SigLIP Vision configs.
+
+        Args:
+            text_config (`Gemma2Config`): The config for the text encoder.
+            vision_config (`SiglipVisionConfig`): The config for the vision encoder.
+            kwargs: Additional keyword arguments for the multimodal config.
+
+        Returns:
+            `BgeGemma2MultimodalConfig`: A new multimodal configuration object.
+        """
+        return cls(
+                text_config=text_config.to_dict(),
+                vision_config=vision_config.to_dict(),
+                **kwargs
                 )
-        return self._ignore_index
-
-    @ignore_index.setter
-    def ignore_index(self, value):
-        self._ignore_index = value
 
     def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Overridden from `PretrainedConfig`.
+        Includes the text and vision sub-config dictionaries.
+        """
         output = super().to_dict()
-        output.pop("_ignore_index", None)
+        # Convert sub-configs to dicts for serialization
+        output["text_config"] = self.text_config.to_dict()
+        output["vision_config"] = self.vision_config.to_dict()
+        output["projection_dim"] = self.projection_dim
         return output
+
+
+# Optionally register the config in CONFIG_MAPPING if you wish to
+# use an AutoConfig-like pattern. For example:
+CONFIG_MAPPING.register("bge-gemma2-multimodal", BgeGemma2MultimodalConfig)
