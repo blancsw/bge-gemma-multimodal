@@ -77,8 +77,18 @@ class BgeGemma2MultimodalPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        # important: this ported version of PaliGemmaisn't meant for training from scratch - only
+        # inference and fine-tuning
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -108,10 +118,10 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
         self.config = config
 
         # 1. Create the text model from Gemma2 config
-        self.text_model = Gemma2Model.from_config(self.config.text_config)
+        self.text_model = Gemma2Model._from_config(self.config.text_config)
 
         # 2. Create the vision model from Siglip config
-        self.vision_model = SiglipVisionModel.from_config(self.config.vision_config)
+        self.vision_model = SiglipVisionModel._from_config(self.config.vision_config)
 
         self.multi_modal_projector = BgeGemma2MultiModalProjector(config)
 
@@ -120,27 +130,27 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings with Llava->PaliGemma
     def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+        return self.text_model.get_input_embeddings()
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_input_embeddings with Llava->PaliGemma
     def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+        self.text_model.set_input_embeddings(value)
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_output_embeddings with Llava->PaliGemma
     def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
+        return self.text_model.get_output_embeddings()
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_output_embeddings with Llava->PaliGemma
     def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
+        self.text_model.set_output_embeddings(new_embeddings)
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_decoder with Llava->PaliGemma
     def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
+        self.text_model.set_decoder(decoder)
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder with Llava->PaliGemma
     def get_decoder(self):
-        return self.language_model.get_decoder()
+        return self.text_model.get_decoder()
 
     def get_image_features(self, pixel_values: torch.FloatTensor):
         """
@@ -152,7 +162,7 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values)
+        image_outputs = self.vision_model(pixel_values)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = image_features / (self.config.text_config.hidden_size ** 0.5)

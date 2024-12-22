@@ -59,18 +59,18 @@ class BgeGemma2MultimodalConfig(PretrainedConfig):
         elif isinstance(text_config, dict):
             self.text_config = Gemma2Config(**(text_config or {}))
         else:
-            assert text_config is not None, f"You must provide text_config or text_pretrained parameter"
+            assert text_pretrained is not None, f"You must provide text_config or text_pretrained parameter"
             self.text_config = Gemma2Config.from_pretrained(text_pretrained)
 
-        if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = (
+        if isinstance(vision_config, SiglipVisionConfig):
+            self.vision_config = vision_config
+        elif isinstance(vision_config, dict):
+            self.vision_config["model_type"] = (
                 vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
             )
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif isinstance(vision_config, SiglipVisionConfig):
-            self.vision_config = vision_config
         else:
-            assert vision_config is not None, f"You must provide text_config or vision_pretrained parameter"
+            assert vision_pretrained is not None, f"You must provide text_config or vision_pretrained parameter"
             self.vision_config = CONFIG_MAPPING["siglip_vision_model"].from_pretrained(vision_pretrained)
 
         # Example of a parameter for projecting text/image features into a shared space

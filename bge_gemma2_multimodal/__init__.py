@@ -1,0 +1,2 @@
+from .configuration_bgeGemma2_multimodal import BgeGemma2MultimodalConfig
+from .modeling_bgeGemma2_multimodal import BgeGemma2MultimodalModel
