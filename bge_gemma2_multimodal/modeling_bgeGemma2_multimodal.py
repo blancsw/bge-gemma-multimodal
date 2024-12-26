@@ -185,12 +185,12 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
             ) -> Union[Tuple, BgeGemma2MultimodalModelOutputWithPast]:
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds\n"
+                             "For vision only embedding add <vision> token into your prompt")
 
         if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                    "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-                    )
+            raise ValueError("You cannot specify both pixel_values and inputs_embeds at the same time, "
+                             "and must specify either one")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -238,7 +238,7 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
                     )
             labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
 
-        # TODO
+        # TODO see if need to keep this
         # causal_mask = self._update_causal_mask(
         #         attention_mask, token_type_ids, past_key_values, cache_position, input_ids, inputs_embeds, is_training
         #         )
