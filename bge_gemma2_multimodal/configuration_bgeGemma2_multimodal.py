@@ -21,32 +21,19 @@ class BgeGemma2MultimodalConfig(PretrainedConfig):
             text_pretrained: str = "BAAI/bge-multilingual-gemma2",
             vision_pretrained: str = "google/siglip-base-patch16-224",
             projection_dim=2048,
-            image_token_index=256000,
+            image_token_index=255999,
             **kwargs
             ):
         """
-        Initializes a multimodal model configuration combining text and vision modules.
-
-        This constructor sets up the configuration for the text and vision modules, along with
-        the projection dimension for feature representations. It allows configuration
-        objects or pre-trained model names for both text and vision modules.
 
         Args:
-            text_config (Union[Gemma2Config, dict]): The configuration for the text module.
-                Can be an instance of `Gemma2Config` or a dictionary.
-            vision_config (Union[SiglipVisionConfig, dict]): The configuration for the vision module.
-                Can be an instance of `SiglipVisionConfig` or a dictionary.
-            text_pretrained (str): The name of the pre-trained text model to use. Defaults
-                to "BAAI/bge-multilingual-gemma2".
-            vision_pretrained (str): The name of the pre-trained vision model to use. Defaults
-                to "google/siglip-base-patch16-224".
-            projection_dim (int): The dimensionality of the projection layer for aligning
-                text and vision features in the same space. Defaults to 2048.
-            **kwargs: Additional keyword arguments for further customization.
-
-        Raises:
-            AssertionError: If neither `text_config` nor `text_pretrained` is provided.
-            AssertionError: If neither `vision_config` nor `vision_pretrained` is provided.
+            text_config:
+            vision_config:
+            text_pretrained:
+            vision_pretrained:
+            projection_dim:
+            image_token_index: index of the token <vision> see tokenizer_config.json for index value
+            **kwargs:
         """
 
         super().__init__(**kwargs)

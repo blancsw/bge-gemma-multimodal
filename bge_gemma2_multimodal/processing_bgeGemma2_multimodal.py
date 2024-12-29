@@ -26,6 +26,7 @@ logger = logging.get_logger(__name__)
 
 class BgeGemma2MultimodalTextKwargs(TextKwargs):
     instruct: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    return_formated_prompt: Optional[bool]
 
 
 class BgeGemma2MultimodalImagesKwargs(ImagesKwargs):
@@ -35,13 +36,16 @@ class BgeGemma2MultimodalImagesKwargs(ImagesKwargs):
 class BgeGemma2MultimodalProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: BgeGemma2MultimodalTextKwargs
     images_kwargs: BgeGemma2MultimodalImagesKwargs
+    return_formated_prompt: Optional[bool]
     _defaults = {
         "text_kwargs":   {
-            "padding": False,
+            "padding":                False,
+            "return_formated_prompt": False,
             },
         "images_kwargs": {
             "data_format": "channels_first",
             },
+
         }
 
 
@@ -138,16 +142,28 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
             ):
         if image_processor is None:
             image_processor = SiglipImageProcessor.from_pretrained("google/siglip-base-patch16-224")
+            self.image_seq_length = 256
+        else:
+            if not hasattr(image_processor, "image_seq_length"):
+                raise ValueError("Image processor is missing an `image_seq_length` attribute.")
+            # Added attribut to the SiglipImageProcessor
+            self.image_seq_length = image_processor.image_seq_length
         if tokenizer is None:
             tokenizer = GemmaTokenizerFast.from_pretrained("./bge_gemma2_multimodal_hub_files")
-        self.image_seq_length = 1
+
         assert self.IMAGE_TOKEN in tokenizer.all_special_tokens
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKEN)
         self.tokenizer = tokenizer
         self.image_processor = image_processor
         super().__init__(image_processor, tokenizer)
 
-    def format_text_input(self, text: TextInput = None, image=None, instruct: TextInput = None) -> TextInput:
+    def format_text_input(
+            self,
+            text: TextInput = None,
+            image=None,
+            instruct: TextInput = None
+            ) -> TextInput:
+        assert text or image, "You must specify either `text` or/and `image`."
         special_tokens = [self.IMAGE_TOKEN, self.TEXT_INSTRUCT_TOKEN, self.QUERY_TOKEN]
         # Image only embedding
         if text is None:
@@ -155,7 +171,7 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
             if isinstance(instruct, str):
                 instruct = remove_tokens(instruct, special_tokens)
                 # format: <vision><instruct>oposite images
-                text = f"{self.IMAGE_TOKEN}{self.TEXT_INSTRUCT_TOKEN}{instruct}"
+                text = f"{self.IMAGE_TOKEN * self.image_seq_length}{self.TEXT_INSTRUCT_TOKEN}{instruct}"
 
             # index image embedding
             else:
@@ -201,6 +217,7 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
                 **kwargs,
                 )
         instruct = output_kwargs["text_kwargs"].pop("instruct", None)
+        return_formated_prompt = output_kwargs["text_kwargs"].pop("return_formated_prompt", False)
 
         if not (images or text):
             raise ValueError("You have to specify either `text` or `images`.")
@@ -242,7 +259,10 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
                 text,
                 **output_kwargs["text_kwargs"],
                 )
-        return BatchFeature(data={**inputs, "pixel_values": pixel_values, "formated_prompt": text})
+        data = {**inputs, "pixel_values": pixel_values}
+        if return_formated_prompt:
+            data["formated_prompt"] = text
+        return BatchFeature(data=data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

@@ -11,6 +11,7 @@ python = "^3.12"
 transformers = {extras = ["sentencepiece"], version = "^4.47.0"}
 torch = {version = "^2.5.1+cu124", source = "pytorch-cu124"}
 torchvision = {version = "^0.20.1+cu124", source = "pytorch-cu124"}
+click = "^8.1.8"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.0.0"

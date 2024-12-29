@@ -204,15 +204,6 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                    past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-                    )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
-
         # Merge text and images
         image_features = None
         if pixel_values is not None:
@@ -238,13 +229,8 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
                     )
             labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
 
-        # TODO see if need to keep this
-        # causal_mask = self._update_causal_mask(
-        #         attention_mask, token_type_ids, past_key_values, cache_position, input_ids, inputs_embeds, is_training
-        #         )
-        causal_mask = None
-        outputs = self.language_model(
-                attention_mask=causal_mask,
+        outputs = self.text_model(
+                attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 inputs_embeds=inputs_embeds,
