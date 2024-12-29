@@ -7,7 +7,6 @@ from typing import List, Union, Optional
 from transformers import GemmaTokenizerFast, SiglipImageProcessor
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput, is_valid_image
-from transformers.models.paligemma.processing_paligemma import PaliGemmaProcessorKwargs
 from transformers.processing_utils import (
     ProcessorMixin,
     Unpack,
@@ -44,6 +43,22 @@ class BgeGemma2MultimodalProcessorKwargs(ProcessingKwargs, total=False):
             "data_format": "channels_first",
             },
         }
+
+
+def remove_tokens(text: str, tokens: list) -> str:
+    """
+    Removes all occurrences of specified tokens from the given text.
+
+    Args:
+        text (str): The input text to process.
+        tokens (list): List of tokens (substrings) to remove from the text.
+
+    Returns:
+        str: The cleaned text with all tokens removed.
+    """
+    for token in tokens:
+        text = text.replace(token, '')
+    return text
 
 
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
@@ -133,40 +148,40 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
     def format_text_input(self, text: TextInput = None, image=None, instruct: TextInput = None) -> TextInput:
+        special_tokens = [self.IMAGE_TOKEN, self.TEXT_INSTRUCT_TOKEN, self.QUERY_TOKEN]
         # Image only embedding
         if text is None:
             # Query image embedding
             if isinstance(instruct, str):
-                text = self.IMAGE_TOKEN + instruct if self.IMAGE_TOKEN not in instruct else instruct
+                instruct = remove_tokens(instruct, special_tokens)
+                # format: <vision><instruct>oposite images
+                text = f"{self.IMAGE_TOKEN}{self.TEXT_INSTRUCT_TOKEN}{instruct}"
 
             # index image embedding
             else:
                 text = self.IMAGE_TOKEN
         # text only embedding
         elif image is None:
+            text = remove_tokens(text, special_tokens)
             # Query text embedding
             if isinstance(instruct, str):
-                text = self.TEXT_INSTRUCT_TOKEN + instruct \
-                    if self.TEXT_INSTRUCT_TOKEN not in instruct else instruct
+                # remove all special tokens to simplify proicessing
+                instruct = remove_tokens(instruct, special_tokens)
+                # format: <instruct>Given a web search query, retrieve...<query>My last bill
+                text = f"{self.TEXT_INSTRUCT_TOKEN}{instruct}{self.QUERY_TOKEN}{text}"
         # Image and text embedding
         else:
+            text = remove_tokens(text, special_tokens)
             # Query text/image embedding
             if isinstance(instruct, str):
-                # Add instruct token
-                # format: <instruct>Given a web search query, retrieve...
-                text = self.TEXT_INSTRUCT_TOKEN + instruct \
-                    if self.TEXT_INSTRUCT_TOKEN not in instruct else instruct
-
-                # Add image vision token
-                # format: <vision><instruct>Given a web search query, retrieve...
-                text = self.IMAGE_TOKEN + text if self.IMAGE_TOKEN not in text else text
-
-                # Add text query text
+                # remove all special tokens to simplify proicessing
+                instruct = remove_tokens(instruct, special_tokens)
                 # format: <vision><instruct>Given a web search query, retrieve...<query>Find similar color image
-                text = self.QUERY_TOKEN + text if self.QUERY_TOKEN not in text else text
+                text = f"{self.IMAGE_TOKEN}{self.TEXT_INSTRUCT_TOKEN}{instruct}{self.QUERY_TOKEN}{text}"
             # text and image embedding
             else:
-                text = self.IMAGE_TOKEN + text if self.IMAGE_TOKEN not in text else text
+                # format: <vision>Find similar color image
+                text = f"{self.IMAGE_TOKEN}{text}"
         return text
 
     def __call__(
@@ -175,13 +190,13 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
             text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
             audio=None,
             videos=None,
-            **kwargs: Unpack[PaliGemmaProcessorKwargs],
+            **kwargs: Unpack[BgeGemma2MultimodalProcessorKwargs],
             ) -> BatchFeature:
         # check if images and text inputs are reversed for BC
         images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
-                PaliGemmaProcessorKwargs,
+                BgeGemma2MultimodalProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
                 **kwargs,
                 )
@@ -190,12 +205,13 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
         if not (images or text):
             raise ValueError("You have to specify either `text` or `images`.")
 
+        if text is None:
+            text = [self.format_text_input(None, images, instruct)]
         # Ensure `text` is a list of inputs
-        if _is_str_or_image(text):
-            text = [text]
-
-        # Format each text
-        text = [self.format_text_input(t, images, instruct) for t in text]
+        elif _is_str_or_image(text):
+            text = [self.format_text_input(text, images, instruct)]
+        else:
+            text = [self.format_text_input(t, images, instruct) for t in text]
 
         # Check if text and images are both provided and have mismatched lengths
         if text and images and isinstance(text, List) and isinstance(images, List) and len(images) != len(text):
@@ -226,7 +242,7 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
                 text,
                 **output_kwargs["text_kwargs"],
                 )
-        return BatchFeature(data={**inputs, "pixel_values": pixel_values})
+        return BatchFeature(data={**inputs, "pixel_values": pixel_values, "formated_prompt": text})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
