@@ -11,6 +11,8 @@ from bge_gemma2_multimodal.processing_bgeGemma2_multimodal import BgeGemma2Multi
 
 @click.command()
 def main():
+    BASED_VISION_MODEL = "google/siglip-base-patch16-224"
+    BASED_EMBEDDING_MODEL = "BAAI/bge-multilingual-gemma2"
     if os.path.exists("bge_gemma2_multimodal_hub_files"):
         do_init = click.confirm(
                 "The folder 'bge_gemma2_multimodal_hub_files' exist. Do you want to overwrite ?")
@@ -19,7 +21,7 @@ def main():
     if do_init:
         # Use Click's confirm for Yes/No input
         if click.confirm("Export the tokenizer ?"):
-            tokenizer = GemmaTokenizerFast.from_pretrained("BAAI/bge-multilingual-gemma2")
+            tokenizer = GemmaTokenizerFast.from_pretrained(BASED_EMBEDDING_MODEL)
             tokenizer.save_pretrained("./bge_gemma2_multimodal_hub_files")
             print("""
             Edit added_tokens.json, special_tokens_map.json, tokenizer.json, tokenizer_config.json 
@@ -27,21 +29,27 @@ def main():
             input("Press enter when finished editing.")
 
         if click.confirm("Export models config ?"):
-            text_config = Gemma2Config.from_pretrained("BAAI/bge-multilingual-gemma2")
-            vision_config = SiglipVisionConfig.from_pretrained("google/siglip-base-patch16-224")
+            text_config = Gemma2Config.from_pretrained(BASED_EMBEDDING_MODEL)
+            vision_config = SiglipVisionConfig.from_pretrained(BASED_VISION_MODEL)
             vision_config.projection_dim = vision_config.hidden_size * 2
             vision_config.num_positions = (vision_config.image_size // vision_config.patch_size) ** 2
             vision_config.num_image_tokens = vision_config.num_positions
             config = BgeGemma2MultimodalConfig(vision_config=vision_config,
+                                               vision_pretrained=BASED_VISION_MODEL,
                                                projection_dim=vision_config.projection_dim,
-                                               text_config=text_config)
+                                               image_token_index=255999,
+                                               text_config=text_config,
+                                               text_pretrained=BASED_EMBEDDING_MODEL)
             config.save_pretrained("./bge_gemma2_multimodal_hub_files")
 
         if click.confirm("Export the processor ?"):
-            image_processor = SiglipImageProcessor.from_pretrained("google/siglip-base-patch16-224")
+            config = BgeGemma2MultimodalConfig.from_pretrained("./bge_gemma2_multimodal_hub_files")
+            image_processor = SiglipImageProcessor.from_pretrained(BASED_VISION_MODEL)
             tokenizer = GemmaTokenizerFast.from_pretrained("./bge_gemma2_multimodal_hub_files")
 
-            processor = BgeGemma2MultimodalProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = BgeGemma2MultimodalProcessor(image_processor=image_processor,
+                                                     image_seq_length=config.vision_config.num_image_tokens,
+                                                     tokenizer=tokenizer)
             processor.save_pretrained("./bge_gemma2_multimodal_hub_files")
 
     # else:

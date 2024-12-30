@@ -1,0 +1,4 @@
+{
+  "image_seq_length": 196,
+  "processor_class": "BgeGemma2MultimodalProcessor"
+}

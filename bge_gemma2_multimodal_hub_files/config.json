@@ -1,0 +1,31 @@
+{
+  "image_token_index": 255999,
+  "model_type": "bgemultimodal",
+  "projection_dim": 1536,
+  "text_config": {
+    "_name_or_path": "BAAI/bge-multilingual-gemma2",
+    "architectures": [
+      "Gemma2Model"
+    ],
+    "hidden_act": "gelu_pytorch_tanh",
+    "hidden_size": 3584,
+    "intermediate_size": 14336,
+    "model_type": "gemma2",
+    "num_attention_heads": 16,
+    "num_hidden_layers": 42,
+    "num_key_value_heads": 8,
+    "sliding_window_size": 4096,
+    "torch_dtype": "float32",
+    "use_cache": false,
+    "vocab_size": 256002
+  },
+  "text_pretrained": "BAAI/bge-multilingual-gemma2",
+  "transformers_version": "4.47.0",
+  "vision_config": {
+    "model_type": "siglip_vision_model",
+    "num_image_tokens": 196,
+    "num_positions": 196,
+    "projection_dim": 1536
+  },
+  "vision_pretrained": "google/siglip-base-patch16-224"
+}

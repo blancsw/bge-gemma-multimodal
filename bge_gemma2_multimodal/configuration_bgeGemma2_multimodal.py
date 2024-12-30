@@ -52,7 +52,7 @@ class BgeGemma2MultimodalConfig(PretrainedConfig):
         if isinstance(vision_config, SiglipVisionConfig):
             self.vision_config = vision_config
         elif isinstance(vision_config, dict):
-            self.vision_config["model_type"] = (
+            vision_config["model_type"] = (
                 vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
             )
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)

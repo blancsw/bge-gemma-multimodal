@@ -4,7 +4,7 @@ Processor class for BgeGemma2Multimodal.
 
 from typing import List, Union, Optional
 
-from transformers import GemmaTokenizerFast, SiglipImageProcessor
+from transformers import GemmaTokenizerFast, SiglipImageProcessor, SiglipVisionConfig
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput, is_valid_image
 from transformers.processing_utils import (
@@ -138,20 +138,27 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
             self,
             image_processor: SiglipImageProcessor = None,
             tokenizer: GemmaTokenizerFast = None,
+            image_seq_length: int = None,
             **kwargs,
             ):
         if image_processor is None:
             image_processor = SiglipImageProcessor.from_pretrained("google/siglip-base-patch16-224")
-            self.image_seq_length = 256
+            vision_config = SiglipVisionConfig.from_pretrained("google/siglip-base-patch16-224")
+            self.image_seq_length = (vision_config.image_size // vision_config.patch_size) ** 2
         else:
-            if not hasattr(image_processor, "image_seq_length"):
-                raise ValueError("Image processor is missing an `image_seq_length` attribute.")
-            # Added attribut to the SiglipImageProcessor
-            self.image_seq_length = image_processor.image_seq_length
+            if image_seq_length:
+                self.image_seq_length = image_seq_length
+            elif hasattr(image_processor, "image_seq_length"):
+                self.image_seq_length = image_processor.image_seq_length
+            else:
+                raise ValueError("Image processor is missing an `image_seq_length` attribute or "
+                                 "call __init__ with image_seq_length")
+
         if tokenizer is None:
+            # TODO replace by the hub path
             tokenizer = GemmaTokenizerFast.from_pretrained("./bge_gemma2_multimodal_hub_files")
 
-        assert self.IMAGE_TOKEN in tokenizer.all_special_tokens
+        assert self.IMAGE_TOKEN in tokenizer.all_special_tokens, f"Image token {self.IMAGE_TOKEN} not found in tokenizer.all_special_tokens. Make sure to use a tokenizer with the image token."
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKEN)
         self.tokenizer = tokenizer
         self.image_processor = image_processor

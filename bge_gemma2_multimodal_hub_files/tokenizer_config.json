@@ -2022,6 +2022,7 @@
   "extra_special_tokens": {},
   "model_max_length": 1000000000000000019884624838656,
   "pad_token": "<pad>",
+  "processor_class": "BgeGemma2MultimodalProcessor",
   "sp_model_kwargs": {},
   "spaces_between_special_tokens": false,
   "tokenizer_class": "GemmaTokenizer",
