@@ -11,7 +11,7 @@ logger = logging.get_logger(__name__)
 
 class BgeGemma2MultimodalConfig(PretrainedConfig):
 
-    model_type = "bgemultimodal"
+    model_type = "bge_gemma2_multimodal"
     sub_configs = {"text_config": Gemma2Config, "vision_config": SiglipVisionConfig}
 
     def __init__(
@@ -35,8 +35,6 @@ class BgeGemma2MultimodalConfig(PretrainedConfig):
             image_token_index: index of the token <vision> see tokenizer_config.json for index value
             **kwargs:
         """
-
-        super().__init__(**kwargs)
         self.text_pretrained = text_pretrained
         self.vision_pretrained = vision_pretrained
         self.image_token_index = image_token_index
@@ -66,44 +64,8 @@ class BgeGemma2MultimodalConfig(PretrainedConfig):
         # For clarity, you may set a default architecture name or adapt as you see fit
         if not hasattr(self, "architectures"):
             self.architectures = ["BgeGemma2MultimodalModel"]
+        super().__init__(**kwargs)
 
-    @classmethod
-    def from_text_vision_configs(
-            cls,
-            text_config: Gemma2Config,
-            vision_config: SiglipVisionConfig,
-            **kwargs
-            ):
-        """
-        Instantiate a `BgeGemma2MultimodalConfig` from Gemma2 + SigLIP Vision configs.
-
-        Args:
-            text_config (`Gemma2Config`): The config for the text encoder.
-            vision_config (`SiglipVisionConfig`): The config for the vision encoder.
-            kwargs: Additional keyword arguments for the multimodal config.
-
-        Returns:
-            `BgeGemma2MultimodalConfig`: A new multimodal configuration object.
-        """
-        return cls(
-                text_config=text_config.to_dict(),
-                vision_config=vision_config.to_dict(),
-                **kwargs
-                )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Overridden from `PretrainedConfig`.
-        Includes the text and vision sub-config dictionaries.
-        """
-        output = super().to_dict()
-        # Convert sub-configs to dicts for serialization
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["projection_dim"] = self.projection_dim
-        return output
-
-
-# Optionally register the config in CONFIG_MAPPING if you wish to
-# use an AutoConfig-like pattern. For example:
-CONFIG_MAPPING.register("bge-gemma2-multimodal", BgeGemma2MultimodalConfig)
+# # Optionally register the config in CONFIG_MAPPING if you wish to
+# # use an AutoConfig-like pattern. For example:
+# CONFIG_MAPPING.register("bge-gemma2-multimodal", BgeGemma2MultimodalConfig)

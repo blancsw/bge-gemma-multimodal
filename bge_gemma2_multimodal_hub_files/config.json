@@ -1,6 +1,6 @@
 {
   "image_token_index": 255999,
-  "model_type": "bgemultimodal",
+  "model_type": "bge_gemma2_multimodal",
   "projection_dim": 1536,
   "text_config": {
     "_name_or_path": "BAAI/bge-multilingual-gemma2",
