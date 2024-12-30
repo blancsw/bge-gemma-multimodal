@@ -172,17 +172,18 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
             ) -> TextInput:
         assert text or image, "You must specify either `text` or/and `image`."
         special_tokens = [self.IMAGE_TOKEN, self.TEXT_INSTRUCT_TOKEN, self.QUERY_TOKEN]
+        image_tokens = self.IMAGE_TOKEN * self.image_seq_length
         # Image only embedding
         if text is None:
             # Query image embedding
             if isinstance(instruct, str):
                 instruct = remove_tokens(instruct, special_tokens)
                 # format: <vision><instruct>oposite images
-                text = f"{self.IMAGE_TOKEN * self.image_seq_length}{self.TEXT_INSTRUCT_TOKEN}{instruct}"
+                text = f"{image_tokens}{self.TEXT_INSTRUCT_TOKEN}{instruct}"
 
             # index image embedding
             else:
-                text = self.IMAGE_TOKEN
+                text = image_tokens
         # text only embedding
         elif image is None:
             text = remove_tokens(text, special_tokens)
@@ -200,11 +201,11 @@ class BgeGemma2MultimodalProcessor(ProcessorMixin):
                 # remove all special tokens to simplify proicessing
                 instruct = remove_tokens(instruct, special_tokens)
                 # format: <vision><instruct>Given a web search query, retrieve...<query>Find similar color image
-                text = f"{self.IMAGE_TOKEN}{self.TEXT_INSTRUCT_TOKEN}{instruct}{self.QUERY_TOKEN}{text}"
+                text = f"{image_tokens}{self.TEXT_INSTRUCT_TOKEN}{instruct}{self.QUERY_TOKEN}{text}"
             # text and image embedding
             else:
                 # format: <vision>Find similar color image
-                text = f"{self.IMAGE_TOKEN}{text}"
+                text = f"{image_tokens}{text}"
         return text
 
     def __call__(

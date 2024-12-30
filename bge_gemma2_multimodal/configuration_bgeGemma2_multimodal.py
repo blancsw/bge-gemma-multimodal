@@ -66,6 +66,19 @@ class BgeGemma2MultimodalConfig(PretrainedConfig):
             self.architectures = ["BgeGemma2MultimodalModel"]
         super().__init__(**kwargs)
 
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Overridden from `PretrainedConfig`.
+        Includes the text and vision sub-config dictionaries.
+        """
+        output = super().to_dict()
+        # Convert sub-configs to dicts for serialization
+        output["text_config"] = self.text_config.to_dict()
+        output["vision_config"] = self.vision_config.to_dict()
+        output["projection_dim"] = self.projection_dim
+        return output
+
+
 # # Optionally register the config in CONFIG_MAPPING if you wish to
 # # use an AutoConfig-like pattern. For example:
 # CONFIG_MAPPING.register("bge-gemma2-multimodal", BgeGemma2MultimodalConfig)

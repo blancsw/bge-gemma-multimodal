@@ -43,11 +43,14 @@ def main():
             text_config = Gemma2Config.from_pretrained(BASED_EMBEDDING_MODEL)
             # Load the vision model config
             vision_config = SiglipVisionConfig.from_pretrained(BASED_VISION_MODEL)
-            # Creat the projection dim
-            vision_config.projection_dim = vision_config.hidden_size * 2
+            # projection dim need to match the embedding gemma2 features dim
+            vision_config.projection_dim = text_config.hidden_size
             # Compute image features
             vision_config.num_positions = (vision_config.image_size // vision_config.patch_size) ** 2
             vision_config.num_image_tokens = vision_config.num_positions
+            # Note used full to add extra multi head attention pooling:
+            # transformers.models.siglip.modeling_siglip.SiglipMultiheadAttentionPoolingHead
+            vision_config.vision_use_head = False
             # get id of the vision special token
             image_token_index = tokenizer.convert_tokens_to_ids(BgeGemma2MultimodalProcessor.IMAGE_TOKEN)
             config = BgeGemma2MultimodalConfig(vision_config=vision_config,

@@ -1,7 +1,7 @@
 {
   "image_token_index": 255999,
   "model_type": "bge_gemma2_multimodal",
-  "projection_dim": 1536,
+  "projection_dim": 3584,
   "text_config": {
     "_name_or_path": "BAAI/bge-multilingual-gemma2",
     "architectures": [
@@ -25,7 +25,8 @@
     "model_type": "siglip_vision_model",
     "num_image_tokens": 196,
     "num_positions": 196,
-    "projection_dim": 1536
+    "projection_dim": 3584,
+    "vision_use_head": false
   },
   "vision_pretrained": "google/siglip-base-patch16-224"
 }

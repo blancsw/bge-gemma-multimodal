@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import Optional, Union, Tuple, List
+from typing import Optional, Union, Tuple
 
 import torch
 from torch import nn
-from transformers import PreTrainedModel, SiglipVisionModel, Gemma2Model, HybridCache, Cache
-from transformers.utils import logging, ModelOutput
+from transformers import PreTrainedModel, SiglipVisionModel, Gemma2Model, HybridCache
+from transformers.modeling_outputs import BaseModelOutputWithPast
+from transformers.utils import logging
 
 from .configuration_bgeGemma2_multimodal import BgeGemma2MultimodalConfig
 
@@ -12,7 +13,7 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class BgeGemma2MultimodalModelOutputWithPast(ModelOutput):
+class BgeGemma2MultimodalModelOutputWithPast(BaseModelOutputWithPast):
     """Output structure for model predictions and intermediate states.
 
         This class holds and organizes the outputs of a multimodal model.
@@ -25,32 +26,13 @@ class BgeGemma2MultimodalModelOutputWithPast(ModelOutput):
         Attributes:
             loss (Optional[torch.FloatTensor]): Training loss, if applicable. This is
                 typically used during model optimization.
-            logits (torch.FloatTensor): Final prediction scores representing
-                unnormalized probabilities for each class or token.
-            past_key_values (Optional[Union[List[torch.FloatTensor], Cache]]): Cached
-                past key-value pairs used in decoder attention mechanisms to improve
-                efficiency during generation tasks.
-            hidden_states (Optional[Tuple[torch.FloatTensor]]): Hidden states from
-                each layer of the model. These states can be used for insights or
-                fine-grained processing.
-            attentions (Optional[Tuple[torch.FloatTensor]]): Attention weights from
-                the model at each layer. These can provide interpretability for
-                which input tokens or features were prominent in predictions.
             image_hidden_states (Optional[torch.FloatTensor]): Hidden states derived
                 from image-based inputs. These are specific to the multimodal
                 processing stage of the model.
-            last_hidden_state (torch.FloatTensor): The final hidden state produced
-                by the model, which serves as the primary output representation for
-                downstream tasks.
     ```
     """
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
 
 
 class BgeGemma2MultiModalProjector(nn.Module):
@@ -165,6 +147,10 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
         image_outputs = self.vision_model(pixel_values)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
+        # Scale the image features by the square root of the hidden size.
+        # This normalization ensures that the image embeddings have a consistent magnitude
+        # when combined with text embeddings, preventing one modality from dominating
+        # during attention computations and maintaining numerical stability.
         image_features = image_features / (self.config.text_config.hidden_size ** 0.5)
         return image_features
 
@@ -182,7 +168,7 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             cache_position: Optional[torch.LongTensor] = None,
-            ) -> Union[Tuple, BgeGemma2MultimodalModelOutputWithPast]:
+            ) -> Union[Tuple, BaseModelOutputWithPast]:
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds\n"
@@ -198,7 +184,7 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO
+        # TODO voir si utile
         # is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
@@ -207,10 +193,13 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
         # Merge text and images
         image_features = None
         if pixel_values is not None:
+            # Obtain the image features after encoding the images
             image_features = self.get_image_features(pixel_values)
-
+            # Create a mask to locate the positions of special "<vision> tokens" within the input sequence
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            # Expand the mask to match the dimensions of `inputs_embeds` for proper broadcasting
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            # Ensure the number of special image tokens matches the total tokens in image_features
             if inputs_embeds[special_image_mask].numel() != image_features.numel():
                 image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
                 raise ValueError(
@@ -219,6 +208,8 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
                         "tokens from image embeddings."
                         )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            # Use `masked_scatter` to replace the placeholder "<vision> tokens" in `inputs_embeds`
+            # with the corresponding `image_features` at the positions specified by the mask
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # mask out pad-token-ids in labels for BC
@@ -239,38 +230,13 @@ class BgeGemma2MultimodalModel(BgeGemma2MultimodalPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 cache_position=cache_position)
-
-        logits = outputs.logits
         loss = None
+        # TODO a adapter
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -shift_logits.shape[1]:].to(logits.device)
-                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
-            else:
-                shift_logits = shift_logits.contiguous()
-                shift_labels = shift_labels.contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-
-            flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
-            flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(flat_logits, flat_labels)
+            loss = 0.0
+        outputs.loss = loss
         if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            outputs += (image_features,)
+            return (loss,) + outputs if loss is not None else outputs
 
-        return BgeGemma2MultimodalModelOutputWithPast(
-                loss=loss,
-                logits=logits,
-                past_key_values=outputs.past_key_values,
-                hidden_states=outputs.hidden_states,
-                attentions=outputs.attentions,
-                image_hidden_states=image_features,
-                )
+        return BgeGemma2MultimodalModelOutputWithPast(**outputs, image_hidden_states=image_features)
